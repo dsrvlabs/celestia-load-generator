@@ -1,0 +1,4 @@
+*.swp
+*.swo
+
+wasm-load-tester
