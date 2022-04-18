@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -26,28 +29,79 @@ type statistic struct {
 // TODO: Get N parameter.
 // TODO: Target TPS.
 func main() {
+	cmd := cobra.Command{
+		Use: "load",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("Args", args)
+
+			flags := cmd.Flags()
+
+			nWorkers, err := flags.GetInt("workers")
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				c := make(chan os.Signal, 1)
+				signal.Notify(c, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
+
+				_ = <-c
+
+				log.Println("Interrupt")
+				cancel()
+			}()
+
+			startLoader(ctx, nWorkers)
+			return nil
+		},
+	}
+
+	cmd.Flags().IntP("workers", "w", 10, "Number of workers")
+
+	if err := cmd.Execute(); err != nil {
+		log.Panic(err)
+	}
+}
+
+func startLoader(ctx context.Context, workers int) {
 	sChan := make(chan int, 100)
 	fChan := make(chan int, 100)
 	cmdChan := make(chan string, 100)
-
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
 
 	statChan := tpsCalculator(ctx, sChan, fChan)
 
 	go addQueue(ctx, cmdChan)
 	go printTPS(ctx, statChan)
+	startWorkers(ctx, workers, cmdChan, sChan, fChan)
+}
+
+func tpsCalculator(ctx context.Context, successChan, failChan <-chan int) chan statistic {
+	tpsChan := make(chan statistic, 1)
+
 	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
+		stat := statistic{}
 
-		_ = <-c
-
-		log.Println("Interrupt")
-		cancel()
+		for {
+			select {
+			case n := <-successChan:
+				stat.SuccessRequest += int64(n)
+				stat.TotalRequest += int64(n)
+			case n := <-failChan:
+				stat.FailRequest += int64(n)
+				stat.TotalRequest += int64(n)
+			case <-time.Tick(elapseTickPeriod):
+				stat.Time = time.Now()
+				stat.Elapse += elapseTickPeriod
+				tpsChan <- stat
+			case <-ctx.Done():
+				break
+			}
+		}
 	}()
 
-	startWorkers(ctx, 10, cmdChan, sChan, fChan)
+	return tpsChan
 }
 
 func addQueue(ctx context.Context, cmdChan chan<- string) {
@@ -59,7 +113,6 @@ func addQueue(ctx context.Context, cmdChan chan<- string) {
 			break
 		}
 	}
-
 }
 
 func printTPS(ctx context.Context, statChan <-chan statistic) {
@@ -107,33 +160,6 @@ func startWorkers(ctx context.Context, n int, cmdChan <-chan string, successChan
 	}
 
 	wg.Wait()
-}
-
-func tpsCalculator(ctx context.Context, successChan, failChan <-chan int) chan statistic {
-	tpsChan := make(chan statistic, 1)
-
-	go func() {
-		stat := statistic{}
-
-		for {
-			select {
-			case n := <-successChan:
-				stat.SuccessRequest += int64(n)
-				stat.TotalRequest += int64(n)
-			case n := <-failChan:
-				stat.FailRequest += int64(n)
-				stat.TotalRequest += int64(n)
-			case <-time.Tick(elapseTickPeriod):
-				stat.Time = time.Now()
-				stat.Elapse += elapseTickPeriod
-				tpsChan <- stat
-			case <-ctx.Done():
-				break
-			}
-		}
-	}()
-
-	return tpsChan
 }
 
 // TODO: Load wasm binary by code.
