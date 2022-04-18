@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"os/exec"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -27,27 +30,46 @@ func main() {
 	fChan := make(chan int, 100)
 	cmdChan := make(chan string, 100)
 
-	statChan := tpsCalculator(sChan, fChan)
-
-	go addQueue(cmdChan)
-	go printTPS(statChan)
-
 	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	statChan := tpsCalculator(ctx, sChan, fChan)
+
+	go addQueue(ctx, cmdChan)
+	go printTPS(ctx, statChan)
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
+
+		_ = <-c
+
+		log.Println("Interrupt")
+		cancel()
+	}()
+
 	startWorkers(ctx, 10, cmdChan, sChan, fChan)
 }
 
-func addQueue(cmdChan chan<- string) {
+func addQueue(ctx context.Context, cmdChan chan<- string) {
 	for {
-		_ = <-time.Tick(1 * time.Millisecond)
-		cmdChan <- "./script/test.sh"
+		select {
+		case <-time.Tick(1 * time.Millisecond):
+			cmdChan <- "./script/test.sh"
+		case <-ctx.Done():
+			break
+		}
 	}
 
 }
 
-func printTPS(statChan <-chan statistic) {
+func printTPS(ctx context.Context, statChan <-chan statistic) {
 	for {
-		stat := <-statChan
-		log.Printf("Req %d/%d, TPS: %f\n", stat.SuccessRequest, stat.TotalRequest, float64(stat.SuccessRequest)/stat.Elapse.Seconds())
+		select {
+		case stat := <-statChan:
+			log.Printf("Req %d/%d, TPS: %f\n", stat.SuccessRequest, stat.TotalRequest, float64(stat.SuccessRequest)/stat.Elapse.Seconds())
+		case <-ctx.Done():
+			break
+		}
 	}
 }
 
@@ -87,7 +109,7 @@ func startWorkers(ctx context.Context, n int, cmdChan <-chan string, successChan
 	wg.Wait()
 }
 
-func tpsCalculator(successChan, failChan <-chan int) chan statistic {
+func tpsCalculator(ctx context.Context, successChan, failChan <-chan int) chan statistic {
 	tpsChan := make(chan statistic, 1)
 
 	go func() {
@@ -105,6 +127,8 @@ func tpsCalculator(successChan, failChan <-chan int) chan statistic {
 				stat.Time = time.Now()
 				stat.Elapse += elapseTickPeriod
 				tpsChan <- stat
+			case <-ctx.Done():
+				break
 			}
 		}
 	}()
