@@ -1,21 +1,26 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/rootwarp/wasm-load-tester/task"
 	"github.com/spf13/cobra"
 )
 
 const (
-	elapseTickPeriod = 100 * time.Millisecond
+	elapseTickPeriod   = 100 * time.Millisecond
+	channelBuffer      = 100
+	defaultWorkerCount = 10
+
+	nodeURL = "https://rpc.torii-1.archway.tech:443"
 )
 
 type statistic struct {
@@ -26,18 +31,45 @@ type statistic struct {
 	Elapse         time.Duration
 }
 
-// TODO: Get N parameter.
-// TODO: Target TPS.
+func init() {
+	cfg := sdk.GetConfig()
+	cfg.SetBech32PrefixForAccount("archway", "archwaypub")
+	cfg.SetBech32PrefixForValidator("archwayvaloper", "archwayvaloperpub")
+	cfg.SetBech32PrefixForConsensusNode("archwayvalcons", "archwayvalconspub")
+	cfg.Seal()
+}
+
 func main() {
-	cmd := cobra.Command{
-		Use: "load",
+	cmd := cobra.Command{}
+
+	uploadCmd := &cobra.Command{
+		Use: "upload",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("Args", args)
 
 			flags := cmd.Flags()
 
-			nWorkers, err := flags.GetInt("workers")
+			wasmFile, err := flags.GetString("wasm")
 			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			passwdFile, err := flags.GetString("password")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			accountFile, err := flags.GetString("account")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			chainID, err := flags.GetString("chain-id")
+			if err != nil {
+				log.Println(err)
 				return err
 			}
 
@@ -53,26 +85,73 @@ func main() {
 				cancel()
 			}()
 
-			startLoader(ctx, nWorkers)
+			// TODO:
+			loader := task.NewLoadTask(ctx, chainID, nodeURL, "~/.archway")
+
+			f, err := os.Open(accountFile)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			r := bufio.NewReader(f)
+
+			accounts := []string{}
+			for {
+				line, _, err := r.ReadLine()
+				if err != nil {
+					break
+				}
+
+				accounts = append(accounts, string(line))
+			}
+
+			sChan := make(chan int, channelBuffer)
+			fChan := make(chan int, channelBuffer)
+			statChan := tpsCalculator(ctx, sChan, fChan)
+
+			go printTPS(ctx, statChan)
+
+			loader.StartUpload(accounts, wasmFile, passwdFile, sChan, fChan)
+
 			return nil
 		},
 	}
 
-	cmd.Flags().IntP("workers", "w", 10, "Number of workers")
+	testCmd := &cobra.Command{
+		Use: "test",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	uploadCmd.Flags().StringP("wasm", "w", "", "WASM file")
+	uploadCmd.MarkFlagRequired("wasm")
+
+	uploadCmd.Flags().StringP("password", "p", "", "Password file")
+	uploadCmd.MarkFlagRequired("password")
+
+	uploadCmd.Flags().StringP("account", "a", "", "account file")
+	uploadCmd.MarkFlagRequired("account")
+
+	uploadCmd.Flags().StringP("chain-id", "c", "", "chain id")
+	uploadCmd.MarkFlagRequired("chain-id")
+
+	cmd.AddCommand(uploadCmd)
+	cmd.AddCommand(testCmd)
 
 	if err := cmd.Execute(); err != nil {
 		log.Panic(err)
 	}
 }
 
-func startLoader(ctx context.Context, workers int) {
-	sChan := make(chan int, 100)
-	fChan := make(chan int, 100)
-	cmdChan := make(chan string, 100)
+func startLoader(ctx context.Context, workers int, loadCmd string) {
+	sChan := make(chan int, channelBuffer)
+	fChan := make(chan int, channelBuffer)
+	cmdChan := make(chan string, channelBuffer)
 
 	statChan := tpsCalculator(ctx, sChan, fChan)
 
-	go addQueue(ctx, cmdChan)
+	go addQueue(ctx, cmdChan, loadCmd)
 	go printTPS(ctx, statChan)
 	startWorkers(ctx, workers, cmdChan, sChan, fChan)
 }
@@ -104,11 +183,11 @@ func tpsCalculator(ctx context.Context, successChan, failChan <-chan int) chan s
 	return tpsChan
 }
 
-func addQueue(ctx context.Context, cmdChan chan<- string) {
+func addQueue(ctx context.Context, cmdChan chan<- string, loadCmd string) {
 	for {
 		select {
 		case <-time.Tick(1 * time.Millisecond):
-			cmdChan <- "./script/test.sh"
+			cmdChan <- loadCmd
 		case <-ctx.Done():
 			break
 		}
@@ -120,46 +199,11 @@ func printTPS(ctx context.Context, statChan <-chan statistic) {
 		select {
 		case stat := <-statChan:
 			log.Printf("Req %d/%d, TPS: %f\n", stat.SuccessRequest, stat.TotalRequest, float64(stat.SuccessRequest)/stat.Elapse.Seconds())
+			continue
 		case <-ctx.Done():
 			break
 		}
 	}
-}
-
-func startWorkers(ctx context.Context, n int, cmdChan <-chan string, successChan, failChan chan<- int) {
-	log.Println("Start Worker")
-
-	wg := sync.WaitGroup{}
-	wg.Add(n)
-
-	for i := 0; i < n; i++ {
-		go func(idx int) {
-			log.Println("Start worker", idx)
-			defer log.Println("Stop worker")
-			defer wg.Done()
-
-			for {
-				select {
-				case cmd, ok := <-cmdChan:
-					if !ok {
-						return
-					}
-
-					c := exec.Command(cmd)
-					err := c.Run()
-					if err != nil {
-						failChan <- 1
-					} else {
-						successChan <- 1
-					}
-				case <-ctx.Done():
-					return
-				}
-			}
-		}(i)
-	}
-
-	wg.Wait()
 }
 
 // TODO: Load wasm binary by code.

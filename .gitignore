@@ -1,4 +1,8 @@
 *.swp
 *.swo
 
+*.txt
+*.log
+
+passwd
 wasm-load-tester
