@@ -19,8 +19,6 @@ const (
 	elapseTickPeriod   = 100 * time.Millisecond
 	channelBuffer      = 100
 	defaultWorkerCount = 10
-
-	nodeURL = "https://rpc.torii-1.archway.tech:443"
 )
 
 type statistic struct {
@@ -68,6 +66,12 @@ func main() {
 			}
 
 			chainID, err := flags.GetString("chain-id")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			nodeURL, err := flags.GetString("node")
 			if err != nil {
 				log.Println(err)
 				return err
@@ -135,6 +139,9 @@ func main() {
 
 	uploadCmd.Flags().StringP("chain-id", "c", "", "chain id")
 	uploadCmd.MarkFlagRequired("chain-id")
+
+	uploadCmd.Flags().StringP("node", "n", "", "Node ID")
+	uploadCmd.MarkFlagRequired("node")
 
 	cmd.AddCommand(uploadCmd)
 	cmd.AddCommand(testCmd)
