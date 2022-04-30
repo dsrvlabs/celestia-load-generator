@@ -121,13 +121,6 @@ func main() {
 		},
 	}
 
-	testCmd := &cobra.Command{
-		Use: "test",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
-	}
-
 	uploadCmd.Flags().StringP("wasm", "w", "", "WASM file")
 	uploadCmd.MarkFlagRequired("wasm")
 
@@ -143,8 +136,15 @@ func main() {
 	uploadCmd.Flags().StringP("node", "n", "", "Node ID")
 	uploadCmd.MarkFlagRequired("node")
 
+	callCmd := &cobra.Command{
+		Use: "call",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
 	cmd.AddCommand(uploadCmd)
-	cmd.AddCommand(testCmd)
+	cmd.AddCommand(callCmd)
 
 	if err := cmd.Execute(); err != nil {
 		log.Panic(err)

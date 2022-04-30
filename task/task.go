@@ -22,6 +22,7 @@ type uploadResponse struct {
 // LoadTask provides interfaces for load testing.
 type LoadTask interface {
 	StartUpload(accounts []string, wasmFile, passwdFile string, sChan, fChan chan<- int) error
+
 	StartCall(accounts []string, address string, sChan, fChan chan<- int) error
 }
 
@@ -63,17 +64,19 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 		// TODO: Script path.
 		txHash, err := t.uploadWasm("./upload_wasm.sh", wasmFile, passwdFile, account, t.chainID, t.nodeURL, t.homeDir)
 		if err != nil {
-			log.Println("uploadWasm", err)
+			//log.Println("uploadWasm", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		log.Println("Hash", txHash)
+		_ = txHash
+
+		//log.Println("Hash", txHash)
 
 		for {
 			ret, err := getTx(cliCtx, txHash)
 			if err != nil {
-				log.Println("Err", err)
+				//log.Println("Err", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -92,7 +95,7 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 }
 
 func (t *loadTask) uploadWasm(filename string, args ...string) (string, error) {
-	log.Println("uploadWasm", args)
+	//log.Println("uploadWasm", args)
 
 	cmd := exec.Command(filename, args...)
 
@@ -101,22 +104,22 @@ func (t *loadTask) uploadWasm(filename string, args ...string) (string, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		log.Println("Err uploadWasm", err)
-		log.Println("uploadWasm Out", out.String())
+		//log.Println("Err uploadWasm", err)
+		//log.Println("uploadWasm Out", out.String())
 		return "", err
 	}
 
-	log.Println("uploadWasm Out", out.String())
+	//log.Println("uploadWasm Out", out.String())
 
 	txHash := strings.Trim(out.String(), "\r\n")
 
-	log.Println("uploadWasm Hash", txHash)
+	//log.Println("uploadWasm Hash", txHash)
 
 	return txHash, nil
 }
 
 func getTx(ctx client.Context, hash string) (*ctypes.ResultTx, error) {
-	log.Println("Call getTx", hash)
+	//log.Println("Call getTx", hash)
 
 	h, err := hex.DecodeString(hash)
 	if err != nil {

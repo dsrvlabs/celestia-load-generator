@@ -117,38 +117,5 @@ func TestUploadAndCheck(t *testing.T) {
 	}
 }
 
-/*
-func TestTask(t *testing.T) {
-
-	sChan := make(chan int, 1)
-	fChan := make(chan int, 1)
-
-	go func() {
-		for {
-			select {
-			case <-sChan:
-				log.Println("S")
-			case <-fChan:
-				log.Println("F")
-			}
-		}
-	}()
-
-	accounts := []string{
-		"archway1jduy83242hv60p4k4kn8dfx9mv95qgrq9lrpt9",
-		"archway1pm0yyd2ncc2x67ctuz5p3tcxa59tezx5scp0hj",
-		"archway179jgnt5ckmnjrxg2rykycv4vkh2y8nh8h30sga",
-		"archway1fqdch0dl4r43wp3yw6f5nkp7jca3xn4m3s2plh",
-		"archway13yazsem53w0lpsf0j0n0l7038jvs5xadr85zrt",
-	}
-
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-
-	_ = cancel
-
-	task := NewLoadTask(ctx)
-	task.StartUpload(accounts, sChan, fChan)
+func TestCallContract(t *testing.T) {
 }
-
-*/
