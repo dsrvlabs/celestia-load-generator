@@ -7,7 +7,6 @@ import (
 	"log"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -23,7 +22,7 @@ type uploadResponse struct {
 type LoadTask interface {
 	StartUpload(accounts []string, wasmFile, passwdFile string, sChan, fChan chan<- int) error
 
-	StartCall(accounts []string, address string, sChan, fChan chan<- int) error
+	StartCall(accounts []string, passwdFile, address string, sChan, fChan chan<- int) error
 }
 
 type loadTask struct {
@@ -34,10 +33,8 @@ type loadTask struct {
 }
 
 func (t *loadTask) StartUpload(accounts []string, wasmFile, passwdFile string, sChan, fChan chan<- int) error {
-	wg := sync.WaitGroup{}
-
 	for _, acc := range accounts {
-		go t.taskUpload(acc, wasmFile, passwdFile, sChan, fChan, &wg)
+		go t.taskUpload(acc, wasmFile, passwdFile, sChan, fChan)
 	}
 
 	for {
@@ -48,7 +45,7 @@ func (t *loadTask) StartUpload(accounts []string, wasmFile, passwdFile string, s
 	}
 }
 
-func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan chan<- int, wg *sync.WaitGroup) {
+func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan chan<- int) {
 	httpCli, err := client.NewClientFromNode(t.nodeURL)
 	if err != nil {
 		panic(err)
@@ -68,8 +65,6 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
-		_ = txHash
 
 		//log.Println("Hash", txHash)
 
@@ -109,10 +104,9 @@ func (t *loadTask) uploadWasm(filename string, args ...string) (string, error) {
 		return "", err
 	}
 
-	//log.Println("uploadWasm Out", out.String())
-
 	txHash := strings.Trim(out.String(), "\r\n")
 
+	//log.Println("uploadWasm Out", out.String())
 	//log.Println("uploadWasm Hash", txHash)
 
 	return txHash, nil
@@ -135,9 +129,28 @@ func getTx(ctx client.Context, hash string) (*ctypes.ResultTx, error) {
 	return cli.Tx(context.Background(), h, true)
 }
 
-func (t *loadTask) StartCall(accounts []string, address string, sChan, fChan chan<- int) error {
-	// TODO: TBD
-	return nil
+func (t *loadTask) StartCall(accounts []string, passwdFile, address string, sChan, fChan chan<- int) error {
+	for _, acc := range accounts {
+		go t.taskContractCall(acc, passwdFile, address, sChan, fChan)
+	}
+
+	for {
+		select {
+		case <-t.ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (t *loadTask) taskContractCall(account, passwdFile, address string, sChan, fChan chan<- int) {
+	for {
+		// TODO: Call contract.
+		log.Println("Call from", account)
+
+		time.Sleep(10 * time.Second)
+
+		// TOCO: Check TX.
+	}
 }
 
 // NewLoadTask creates new test instances.

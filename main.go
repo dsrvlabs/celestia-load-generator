@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -43,8 +42,6 @@ func main() {
 	uploadCmd := &cobra.Command{
 		Use: "upload",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Args", args)
-
 			flags := cmd.Flags()
 
 			wasmFile, err := flags.GetString("wasm")
@@ -89,7 +86,7 @@ func main() {
 				cancel()
 			}()
 
-			// TODO:
+			// TODO: Home dir
 			loader := task.NewLoadTask(ctx, chainID, nodeURL, "~/.archway")
 
 			f, err := os.Open(accountFile)
@@ -136,12 +133,91 @@ func main() {
 	uploadCmd.Flags().StringP("node", "n", "", "Node ID")
 	uploadCmd.MarkFlagRequired("node")
 
+	// TODO: Refactoring this.
 	callCmd := &cobra.Command{
 		Use: "call",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			flags := cmd.Flags()
+
+			passwdFile, err := flags.GetString("password")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			accountFile, err := flags.GetString("account")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			chainID, err := flags.GetString("chain-id")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			nodeURL, err := flags.GetString("node")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				c := make(chan os.Signal, 1)
+				signal.Notify(c, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
+
+				_ = <-c
+
+				log.Println("Interrupt")
+				cancel()
+			}()
+
+			// TODO: Home dir
+			loader := task.NewLoadTask(ctx, chainID, nodeURL, "~/.archway")
+
+			f, err := os.Open(accountFile)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			r := bufio.NewReader(f)
+
+			accounts := []string{}
+			for {
+				line, _, err := r.ReadLine()
+				if err != nil {
+					break
+				}
+
+				accounts = append(accounts, string(line))
+			}
+
+			sChan := make(chan int, channelBuffer)
+			fChan := make(chan int, channelBuffer)
+			statChan := tpsCalculator(ctx, sChan, fChan)
+
+			go printTPS(ctx, statChan)
+
+			loader.StartCall(accounts, passwdFile, "", sChan, fChan)
+
 			return nil
 		},
 	}
+
+	callCmd.Flags().StringP("password", "p", "", "Password file")
+	callCmd.MarkFlagRequired("password")
+
+	callCmd.Flags().StringP("account", "a", "", "account file")
+	callCmd.MarkFlagRequired("account")
+
+	callCmd.Flags().StringP("chain-id", "c", "", "chain id")
+	callCmd.MarkFlagRequired("chain-id")
+
+	callCmd.Flags().StringP("node", "n", "", "Node ID")
+	callCmd.MarkFlagRequired("node")
 
 	cmd.AddCommand(uploadCmd)
 	cmd.AddCommand(callCmd)
