@@ -14,4 +14,5 @@ archwayd tx wasm execute $ADDR "$DATA" \
     --gas=auto \
     --amount=1utorii \
     --gas-prices=0.25utorii --gas-adjustment 1.3 \
+    --sequence=28630 \
     --node=$RPC < <(echo @validator2022)

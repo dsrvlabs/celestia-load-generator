@@ -59,19 +59,15 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 
 	for {
 		// TODO: Script path.
-		txHash, err := t.uploadWasm("./upload_wasm.sh", wasmFile, passwdFile, account, t.chainID, t.nodeURL, t.homeDir)
+		txHash, err := t.executeShellScript("./upload_wasm.sh", wasmFile, passwdFile, account, t.chainID, t.nodeURL, t.homeDir)
 		if err != nil {
-			//log.Println("uploadWasm", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		//log.Println("Hash", txHash)
-
 		for {
 			ret, err := getTx(cliCtx, txHash)
 			if err != nil {
-				//log.Println("Err", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -89,9 +85,7 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 	}
 }
 
-func (t *loadTask) uploadWasm(filename string, args ...string) (string, error) {
-	//log.Println("uploadWasm", args)
-
+func (t *loadTask) executeShellScript(filename string, args ...string) (string, error) {
 	cmd := exec.Command(filename, args...)
 
 	var out bytes.Buffer
@@ -99,22 +93,15 @@ func (t *loadTask) uploadWasm(filename string, args ...string) (string, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		//log.Println("Err uploadWasm", err)
-		//log.Println("uploadWasm Out", out.String())
 		return "", err
 	}
 
 	txHash := strings.Trim(out.String(), "\r\n")
 
-	//log.Println("uploadWasm Out", out.String())
-	//log.Println("uploadWasm Hash", txHash)
-
 	return txHash, nil
 }
 
 func getTx(ctx client.Context, hash string) (*ctypes.ResultTx, error) {
-	//log.Println("Call getTx", hash)
-
 	h, err := hex.DecodeString(hash)
 	if err != nil {
 		panic(err)
@@ -143,13 +130,42 @@ func (t *loadTask) StartCall(accounts []string, passwdFile, address string, sCha
 }
 
 func (t *loadTask) taskContractCall(account, passwdFile, address string, sChan, fChan chan<- int) {
+	httpCli, err := client.NewClientFromNode(t.nodeURL)
+	if err != nil {
+		panic(err)
+	}
+
+	cliCtx := client.Context{}
+	cliCtx = cliCtx.
+		WithChainID(t.chainID).
+		WithNodeURI(t.nodeURL).
+		WithClient(httpCli)
+
 	for {
-		// TODO: Call contract.
-		log.Println("Call from", account)
+		//
+		txHash, err := t.executeShellScript("./call_contract.sh", passwdFile, account, address, t.chainID, t.nodeURL, t.homeDir)
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
 
-		time.Sleep(10 * time.Second)
+		for {
+			ret, err := getTx(cliCtx, txHash)
+			if err != nil {
+				time.Sleep(1 * time.Second)
+				continue
+			}
 
-		// TOCO: Check TX.
+			if ret.TxResult.Code == 0 {
+				log.Println("Success")
+				sChan <- 1
+				break
+			} else {
+				log.Println("Failed")
+				fChan <- 1
+				break
+			}
+		}
 	}
 }
 

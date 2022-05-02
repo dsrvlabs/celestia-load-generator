@@ -151,6 +151,12 @@ func main() {
 				return err
 			}
 
+			contract, err := flags.GetString("contract")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+
 			chainID, err := flags.GetString("chain-id")
 			if err != nil {
 				log.Println(err)
@@ -201,7 +207,7 @@ func main() {
 
 			go printTPS(ctx, statChan)
 
-			loader.StartCall(accounts, passwdFile, "", sChan, fChan)
+			loader.StartCall(accounts, passwdFile, contract, sChan, fChan)
 
 			return nil
 		},
@@ -212,6 +218,9 @@ func main() {
 
 	callCmd.Flags().StringP("account", "a", "", "account file")
 	callCmd.MarkFlagRequired("account")
+
+	callCmd.Flags().StringP("contract", "t", "", "contract address")
+	callCmd.MarkFlagRequired("contract")
 
 	callCmd.Flags().StringP("chain-id", "c", "", "chain id")
 	callCmd.MarkFlagRequired("chain-id")
