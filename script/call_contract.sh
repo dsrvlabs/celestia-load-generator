@@ -16,7 +16,7 @@ RESP=`archwayd tx wasm execute $CONTRACT "$TX" \
     --gas=auto \
     --gas-prices=1utorii \
     --gas-adjustment=1.5 \
-    --output=json -y < ./passwd`
+    --output=json -y < $PASSWD_FILE`
 
 TXHASH=`echo $RESP | jq .txhash | sed -e 's/^"//' -e 's/"$//'`
 echo $TXHASH

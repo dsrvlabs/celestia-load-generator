@@ -5,4 +5,4 @@
 *.log
 
 passwd
-wasm-load-tester
+wasm-load-generator

@@ -59,8 +59,9 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 
 	for {
 		// TODO: Script path.
-		txHash, err := t.executeShellScript("./upload_wasm.sh", wasmFile, passwdFile, account, t.chainID, t.nodeURL, t.homeDir)
+		txHash, err := t.executeShellScript("./script/upload_wasm.sh", wasmFile, passwdFile, account, t.chainID, t.nodeURL, t.homeDir)
 		if err != nil {
+			log.Println("TX", txHash, err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -68,6 +69,7 @@ func (t *loadTask) taskUpload(account, wasmFile, passwdFile string, sChan, fChan
 		for {
 			ret, err := getTx(cliCtx, txHash)
 			if err != nil {
+				log.Println("TX Check", ret, err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -93,10 +95,13 @@ func (t *loadTask) executeShellScript(filename string, args ...string) (string, 
 
 	err := cmd.Run()
 	if err != nil {
+		log.Println("executeShellScript", err)
 		return "", err
 	}
 
 	txHash := strings.Trim(out.String(), "\r\n")
+
+	log.Println("executeShellScript", out.String, txHash)
 
 	return txHash, nil
 }
@@ -142,9 +147,10 @@ func (t *loadTask) taskContractCall(account, passwdFile, address string, sChan, 
 		WithClient(httpCli)
 
 	for {
-		//
-		txHash, err := t.executeShellScript("./call_contract.sh", passwdFile, account, address, t.chainID, t.nodeURL, t.homeDir)
+		// TODO:
+		txHash, err := t.executeShellScript("./script/call_contract.sh", passwdFile, account, address, t.chainID, t.nodeURL, t.homeDir)
 		if err != nil {
+			log.Println(txHash, err)
 			time.Sleep(1 * time.Second)
 			continue
 		}

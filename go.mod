@@ -1,4 +1,4 @@
-module github.com/rootwarp/wasm-load-tester
+module github.com/dsrvlabs/wasm-load-generator
 
 go 1.17
 

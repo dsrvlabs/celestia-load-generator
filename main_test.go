@@ -5,8 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTPSCalculation(t *testing.T) {
@@ -19,32 +23,6 @@ func TestTPSCalculation(t *testing.T) {
 
 	startLoader(ctx, 10, "")
 }
-
-// func TestUploadCommand(t *testing.T) {
-// 	cmd := exec.Command(
-// 		"/home/rootwarp/bin/archwayd",
-// 		"tx", "wasm", "store",
-// 		"./script/cw_nameservice.wasm",
-// 		"--chain-id=torii-1",
-// 		"--from=cheese",
-// 		"--home=~/.archway",
-// 		"--gas=auto",
-// 		"--broadcast-mode=sync",
-// 		"--node=https://rpc.torii-1.archway.ech:443",
-// 		"-y",
-// 		"--output=json",
-// 	)
-//
-// 	var out bytes.Buffer
-// 	cmd.Stdout = &out
-// 	cmd.Stderr = &out
-// 	cmd.Stdin = strings.NewReader("@validator2022")
-//
-// 	err := cmd.Run()
-//
-// 	fmt.Println(err)
-// 	fmt.Println(out.String())
-// }
 
 func TestExec(t *testing.T) {
 	cmd := exec.Command(
@@ -66,4 +44,12 @@ func TestExec(t *testing.T) {
 
 	fmt.Println(err)
 	fmt.Println(out.String())
+}
+
+func TestAbsolutePath(t *testing.T) {
+	absPath, err := filepath.Abs("./README.md")
+
+	assert.Nil(t, err)
+	assert.True(t, strings.HasPrefix(absPath, "/"))
+	assert.True(t, strings.HasSuffix(absPath, "/README.md"))
 }

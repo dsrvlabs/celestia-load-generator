@@ -3,7 +3,7 @@
 #set -x
 
 WASM_FILE=$1
-#PASSWD=$2
+PASSWD=$2
 ACCOUNT=$3
 CHAIN_ID=$4
 RPC=$5
@@ -15,7 +15,7 @@ RESP=`archwayd tx wasm store $WASM_FILE \
     --home ~/.archway \
     --gas auto \
     --broadcast-mode sync \
-    --node $RPC -y --output json < ./passwd`
+    --node $RPC -y --output json < $PASSWD`
 
 TXHASH=`echo $RESP | jq .txhash | sed -e 's/^"//' -e 's/"$//'`
 echo $TXHASH

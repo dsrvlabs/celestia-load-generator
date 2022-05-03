@@ -6,11 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/rootwarp/wasm-load-tester/task"
+	"github.com/dsrvlabs/wasm-load-generator/task"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +29,15 @@ type statistic struct {
 	Elapse         time.Duration
 }
 
+type flagConfigs struct {
+	WasmFile       string `json:"wasm_file"`
+	PasswordFile   string `json:"password_file"`
+	AccountFile    string `json:"account_file"`
+	ChainID        string `json:"chain_id"`
+	Node           string `json:"node"`
+	ContractAddess string `json:"contract_addess"`
+}
+
 func init() {
 	cfg := sdk.GetConfig()
 	cfg.SetBech32PrefixForAccount("archway", "archwaypub")
@@ -42,37 +52,7 @@ func main() {
 	uploadCmd := &cobra.Command{
 		Use: "upload",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			flags := cmd.Flags()
-
-			wasmFile, err := flags.GetString("wasm")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			passwdFile, err := flags.GetString("password")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			accountFile, err := flags.GetString("account")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			chainID, err := flags.GetString("chain-id")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			nodeURL, err := flags.GetString("node")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
+			flags, err := parseFlags(cmd)
 
 			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
@@ -87,9 +67,9 @@ func main() {
 			}()
 
 			// TODO: Home dir
-			loader := task.NewLoadTask(ctx, chainID, nodeURL, "~/.archway")
+			loader := task.NewLoadTask(ctx, flags.ChainID, flags.Node, "~/.archway")
 
-			f, err := os.Open(accountFile)
+			f, err := os.Open(flags.AccountFile)
 			if err != nil {
 				log.Panic(err)
 			}
@@ -112,7 +92,7 @@ func main() {
 
 			go printTPS(ctx, statChan)
 
-			loader.StartUpload(accounts, wasmFile, passwdFile, sChan, fChan)
+			loader.StartUpload(accounts, flags.WasmFile, flags.PasswordFile, sChan, fChan)
 
 			return nil
 		},
@@ -137,37 +117,7 @@ func main() {
 	callCmd := &cobra.Command{
 		Use: "call",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			flags := cmd.Flags()
-
-			passwdFile, err := flags.GetString("password")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			accountFile, err := flags.GetString("account")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			contract, err := flags.GetString("contract")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			chainID, err := flags.GetString("chain-id")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-
-			nodeURL, err := flags.GetString("node")
-			if err != nil {
-				log.Println(err)
-				return err
-			}
+			flags, err := parseFlags(cmd)
 
 			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
@@ -182,9 +132,9 @@ func main() {
 			}()
 
 			// TODO: Home dir
-			loader := task.NewLoadTask(ctx, chainID, nodeURL, "~/.archway")
+			loader := task.NewLoadTask(ctx, flags.ChainID, flags.Node, "~/.archway")
 
-			f, err := os.Open(accountFile)
+			f, err := os.Open(flags.AccountFile)
 			if err != nil {
 				log.Panic(err)
 			}
@@ -207,7 +157,7 @@ func main() {
 
 			go printTPS(ctx, statChan)
 
-			loader.StartCall(accounts, passwdFile, contract, sChan, fChan)
+			loader.StartCall(accounts, flags.PasswordFile, flags.ContractAddess, sChan, fChan)
 
 			return nil
 		},
@@ -236,16 +186,63 @@ func main() {
 	}
 }
 
-func startLoader(ctx context.Context, workers int, loadCmd string) {
-	sChan := make(chan int, channelBuffer)
-	fChan := make(chan int, channelBuffer)
-	cmdChan := make(chan string, channelBuffer)
+func parseFlags(cmd *cobra.Command) (*flagConfigs, error) {
+	retFlags := &flagConfigs{}
 
-	statChan := tpsCalculator(ctx, sChan, fChan)
+	flags := cmd.Flags()
+	if wasmFile, err := flags.GetString("wasm"); err == nil {
+		wasmFile, err = filepath.Abs(wasmFile)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
 
-	go addQueue(ctx, cmdChan, loadCmd)
-	go printTPS(ctx, statChan)
-	startWorkers(ctx, workers, cmdChan, sChan, fChan)
+		retFlags.WasmFile = wasmFile
+	}
+
+	if passwdFile, err := flags.GetString("password"); err == nil {
+		passwdFile, err = filepath.Abs(passwdFile)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+
+		retFlags.PasswordFile = passwdFile
+	}
+
+	if accountFile, err := flags.GetString("account"); err == nil {
+		accountFile, err = filepath.Abs(accountFile)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+
+		retFlags.AccountFile = accountFile
+	}
+
+	if contract, err := flags.GetString("contract"); err == nil {
+		log.Println(err)
+		retFlags.ContractAddess = contract
+		return nil, err
+	}
+
+	chainID, err := flags.GetString("chain-id")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	retFlags.ChainID = chainID
+
+	nodeURL, err := flags.GetString("node")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	retFlags.Node = nodeURL
+
+	return retFlags, nil
 }
 
 func tpsCalculator(ctx context.Context, successChan, failChan <-chan int) chan statistic {
